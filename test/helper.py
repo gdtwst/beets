@@ -222,11 +222,18 @@ class TestHelper(object):
         beets.config['plugins'] = plugins
         beets.plugins.load_plugins(plugins)
         beets.plugins.find_plugins()
-        # Take a backup of the original _types to restore when unloading
+
+        # Take a backup of the original _types and _queries to restore
+        # when unloading.
         Item._original_types = dict(Item._types)
         Album._original_types = dict(Album._types)
         Item._types.update(beets.plugins.types(Item))
         Album._types.update(beets.plugins.types(Album))
+
+        Item._original_queries = dict(Item._queries)
+        Album._original_queries = dict(Album._queries)
+        Item._queries.update(beets.plugins.named_queries(Item))
+        Album._queries.update(beets.plugins.named_queries(Album))
 
     def unload_plugins(self):
         """Unload all plugins and remove the from the configuration.
@@ -237,6 +244,8 @@ class TestHelper(object):
         beets.plugins._instances = {}
         Item._types = Item._original_types
         Album._types = Album._original_types
+        Item._queries = Item._original_queries
+        Album._queries = Album._original_queries
 
     def create_importer(self, item_count=1, album_count=1):
         """Create files to import and return corresponding session.
@@ -535,7 +544,7 @@ class TestImportSession(importer.ImportSession):
 
     choose_item = choose_match
 
-    Resolution = Enum('Resolution', 'REMOVE SKIP KEEPBOTH')
+    Resolution = Enum('Resolution', 'REMOVE SKIP KEEPBOTH MERGE')
 
     default_resolution = 'REMOVE'
 
@@ -553,18 +562,20 @@ class TestImportSession(importer.ImportSession):
             task.set_choice(importer.action.SKIP)
         elif res == self.Resolution.REMOVE:
             task.should_remove_duplicates = True
+        elif res == self.Resolution.MERGE:
+            task.should_merge_duplicates = True
 
 
-def generate_album_info(album_id, track_ids):
+def generate_album_info(album_id, track_values):
     """Return `AlbumInfo` populated with mock data.
 
     Sets the album info's `album_id` field is set to the corresponding
-    argument. For each value in `track_ids` the `TrackInfo` from
-    `generate_track_info` is added to the album info's `tracks` field.
+    argument. For each pair (`id`, `values`) in `track_values` the `TrackInfo`
+    from `generate_track_info` is added to the album info's `tracks` field.
     Most other fields of the album and track info are set to "album
     info" and "track info", respectively.
     """
-    tracks = [generate_track_info(id) for id in track_ids]
+    tracks = [generate_track_info(id, values) for id, values in track_values]
     album = AlbumInfo(
         album_id=u'album info',
         album=u'album info',
@@ -581,7 +592,7 @@ ALBUM_INFO_FIELDS = ['album', 'album_id', 'artist', 'artist_id',
                      'asin', 'albumtype', 'va', 'label',
                      'artist_sort', 'releasegroup_id', 'catalognum',
                      'language', 'country', 'albumstatus', 'media',
-                     'albumdisambig', 'artist_credit',
+                     'albumdisambig', 'releasegroupdisambig', 'artist_credit',
                      'data_source', 'data_url']
 
 

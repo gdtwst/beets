@@ -89,6 +89,7 @@ def item(lib=None):
         mb_albumid='someID-2',
         mb_artistid='someID-3',
         mb_albumartistid='someID-4',
+        mb_releasetrackid='someID-5',
         album_id=None,
         mtime=12345,
     )
@@ -282,6 +283,9 @@ class DummyIn(object):
             self.buf.append(s + b'\n')
         else:
             self.buf.append(s + '\n')
+
+    def close(self):
+        pass
 
     def readline(self):
         if not self.buf:

@@ -507,10 +507,14 @@ class UpdateTest(_common.TestCase):
         # Copy a file into the library.
         self.lib = library.Library(':memory:', self.libdir)
         item_path = os.path.join(_common.RSRC, b'full.mp3')
+        item_path_two = os.path.join(_common.RSRC, b'full.flac')
         self.i = library.Item.from_path(item_path)
+        self.i2 = library.Item.from_path(item_path_two)
         self.lib.add(self.i)
+        self.lib.add(self.i2)
         self.i.move(operation=MoveOperation.COPY)
-        self.album = self.lib.add_album([self.i])
+        self.i2.move(operation=MoveOperation.COPY)
+        self.album = self.lib.add_album([self.i, self.i2])
 
         # Album art.
         artfile = os.path.join(self.temp_dir, b'testart.jpg')
@@ -531,12 +535,14 @@ class UpdateTest(_common.TestCase):
     def test_delete_removes_item(self):
         self.assertTrue(list(self.lib.items()))
         os.remove(self.i.path)
+        os.remove(self.i2.path)
         self._update()
         self.assertFalse(list(self.lib.items()))
 
     def test_delete_removes_album(self):
         self.assertTrue(self.lib.albums())
         os.remove(self.i.path)
+        os.remove(self.i2.path)
         self._update()
         self.assertFalse(self.lib.albums())
 
@@ -544,6 +550,7 @@ class UpdateTest(_common.TestCase):
         artpath = self.album.artpath
         self.assertExists(artpath)
         os.remove(self.i.path)
+        os.remove(self.i2.path)
         self._update()
         self.assertNotExists(artpath)
 
@@ -607,6 +614,7 @@ class UpdateTest(_common.TestCase):
         self._update(move=True)
         album = self.lib.albums()[0]
         self.assertNotEqual(artpath, album.artpath)
+        self.assertIsNotNone(album.artpath)
 
     def test_selective_modified_album_metadata_moved(self):
         mf = MediaFile(syspath(self.i.path))
@@ -800,16 +808,18 @@ class ConfigTest(unittest.TestCase, TestHelper, _common.Assertions):
 
         self.run_command('test', lib=None)
         replacements = self.test_cmd.lib.replacements
-        self.assertEqual(replacements, [(re.compile(u'[xy]'), 'z')])
+        repls = [(p.pattern, s) for p, s in replacements]  # Compare patterns.
+        self.assertEqual(repls, [(u'[xy]', 'z')])
 
     def test_multiple_replacements_parsed(self):
         with self.write_config_file() as config:
             config.write("replace: {'[xy]': z, foo: bar}")
         self.run_command('test', lib=None)
         replacements = self.test_cmd.lib.replacements
-        self.assertEqual(replacements, [
-            (re.compile(u'[xy]'), u'z'),
-            (re.compile(u'foo'), u'bar'),
+        repls = [(p.pattern, s) for p, s in replacements]
+        self.assertEqual(repls, [
+            (u'[xy]', u'z'),
+            (u'foo', u'bar'),
         ])
 
     def test_cli_config_option(self):
@@ -1213,13 +1223,14 @@ class CommonOptionsParserCliTest(unittest.TestCase, TestHelper):
     """
     def setUp(self):
         self.setup_beets()
-        self.lib = library.Library(':memory:')
         self.item = _common.item()
         self.item.path = b'xxx/yyy'
         self.lib.add(self.item)
         self.lib.add_album([self.item])
+        self.load_plugins()
 
     def tearDown(self):
+        self.unload_plugins()
         self.teardown_beets()
 
     def test_base(self):

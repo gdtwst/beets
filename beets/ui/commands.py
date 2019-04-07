@@ -172,6 +172,8 @@ def disambig_string(info):
             disambig.append(info.country)
         if info.label:
             disambig.append(info.label)
+        if info.catalognum:
+            disambig.append(info.catalognum)
         if info.albumdisambig:
             disambig.append(info.albumdisambig)
 
@@ -237,7 +239,7 @@ def show_change(cur_artist, cur_album, match):
             medium = track_info.disc
             mediums = track_info.disctotal
         if config['per_disc_numbering']:
-            if mediums > 1:
+            if mediums and mediums > 1:
                 return u'{0}-{1}'.format(medium, medium_index)
             else:
                 return six.text_type(medium_index or index)
@@ -253,6 +255,9 @@ def show_change(cur_artist, cur_album, match):
         if artist_r == VARIOUS_ARTISTS:
             # Hide artists for VA releases.
             artist_l, artist_r = u'', u''
+
+        if config['artist_credit']:
+            artist_r = match.info.artist_credit
 
         artist_l, artist_r = ui.colordiff(artist_l, artist_r)
         album_l, album_r = ui.colordiff(album_l, album_r)
@@ -373,15 +378,22 @@ def show_change(cur_artist, cur_album, match):
                len(match.info.tracks),
                len(match.extra_tracks) / len(match.info.tracks)
                ))
+        pad_width = max(len(track_info.title) for track_info in
+                        match.extra_tracks)
     for track_info in match.extra_tracks:
-        line = u' ! %s (#%s)' % (track_info.title, format_index(track_info))
+        line = u' ! {0: <{width}} (#{1: >2})'.format(track_info.title,
+                                                     format_index(track_info),
+                                                     width=pad_width)
         if track_info.length:
             line += u' (%s)' % ui.human_seconds_short(track_info.length)
         print_(ui.colorize('text_warning', line))
     if match.extra_items:
         print_(u'Unmatched tracks ({0}):'.format(len(match.extra_items)))
+        pad_width = max(len(item.title) for item in match.extra_items)
     for item in match.extra_items:
-        line = u' ! %s (#%s)' % (item.title, format_index(item))
+        line = u' ! {0: <{width}} (#{1: >2})'.format(item.title,
+                                                     format_index(item),
+                                                     width=pad_width)
         if item.length:
             line += u' (%s)' % ui.human_seconds_short(item.length)
         print_(ui.colorize('text_warning', line))
@@ -691,7 +703,6 @@ class TerminalImportSession(importer.ImportSession):
             return action
 
         # Loop until we have a choice.
-        candidates, rec = task.candidates, task.rec
         while True:
             # Ask for a choice from the user. The result of
             # `choose_candidate` may be an `importer.action`, an
@@ -699,8 +710,8 @@ class TerminalImportSession(importer.ImportSession):
             # `PromptChoice`.
             choices = self._get_choices(task)
             choice = choose_candidate(
-                candidates, False, rec, task.cur_artist, task.cur_album,
-                itemcount=len(task.items), choices=choices
+                task.candidates, False, task.rec, task.cur_artist,
+                task.cur_album, itemcount=len(task.items), choices=choices
             )
 
             # Basic choices that require no more action here.
@@ -716,8 +727,8 @@ class TerminalImportSession(importer.ImportSession):
                     return post_choice
                 elif isinstance(post_choice, autotag.Proposal):
                     # Use the new candidates and continue around the loop.
-                    candidates = post_choice.candidates
-                    rec = post_choice.recommendation
+                    task.candidates = post_choice.candidates
+                    task.rec = post_choice.recommendation
 
             # Otherwise, we have a specific match selection.
             else:
@@ -791,7 +802,7 @@ class TerminalImportSession(importer.ImportSession):
             ))
 
             sel = ui.input_options(
-                (u'Skip new', u'Keep both', u'Remove old')
+                (u'Skip new', u'Keep both', u'Remove old', u'Merge all')
             )
 
         if sel == u's':
@@ -803,6 +814,8 @@ class TerminalImportSession(importer.ImportSession):
         elif sel == u'r':
             # Remove old.
             task.should_remove_duplicates = True
+        elif sel == u'm':
+            task.should_merge_duplicates = True
         else:
             assert False
 
@@ -932,6 +945,13 @@ def import_func(lib, opts, args):
         if not paths:
             raise ui.UserError(u'no path specified')
 
+        # On Python 2, we get filenames as raw bytes, which is what we
+        # need. On Python 3, we need to undo the "helpful" conversion to
+        # Unicode strings to get the real bytestring filename.
+        if not six.PY2:
+            paths = [p.encode(util.arg_encoding(), 'surrogateescape')
+                     for p in paths]
+
     import_files(lib, paths, query)
 
 
@@ -1001,6 +1021,10 @@ import_cmd.parser.add_option(
 import_cmd.parser.add_option(
     u'-I', u'--noincremental', dest='incremental', action='store_false',
     help=u'do not skip already-imported directories'
+)
+import_cmd.parser.add_option(
+    u'--from-scratch', dest='from_scratch', action='store_true',
+    help=u'erase existing metadata before applying new metadata'
 )
 import_cmd.parser.add_option(
     u'--flat', dest='flat', action='store_true',
@@ -1153,7 +1177,7 @@ def update_items(lib, query, album, move, pretend, fields):
                 # Manually moving and storing the album.
                 items = list(album.items())
                 for item in items:
-                    item.move(store=False)
+                    item.move(store=False, with_album=False)
                     item.store(fields=fields)
                 album.move(store=False)
                 album.store(fields=fields)
@@ -1352,10 +1376,10 @@ def modify_items(lib, mods, dels, query, write, move, album, confirm):
     # objects.
     print_(u'Modifying {0} {1}s.'
            .format(len(objs), u'album' if album else u'item'))
-    changed = set()
+    changed = []
     for obj in objs:
-        if print_and_modify(obj, mods, dels):
-            changed.add(obj)
+        if print_and_modify(obj, mods, dels) and obj not in changed:
+            changed.append(obj)
 
     # Still something to do?
     if not changed:
@@ -1466,18 +1490,24 @@ def move_items(lib, dest, query, copy, album, pretend, confirm=False,
     """
     items, albums = _do_query(lib, query, album, False)
     objs = albums if album else items
+    num_objs = len(objs)
 
     # Filter out files that don't need to be moved.
     isitemmoved = lambda item: item.path != item.destination(basedir=dest)
     isalbummoved = lambda album: any(isitemmoved(i) for i in album.items())
     objs = [o for o in objs if (isalbummoved if album else isitemmoved)(o)]
+    num_unmoved = num_objs - len(objs)
+    # Report unmoved files that match the query.
+    unmoved_msg = u''
+    if num_unmoved > 0:
+        unmoved_msg = u' ({} already in place)'.format(num_unmoved)
 
     copy = copy or export  # Exporting always copies.
     action = u'Copying' if copy else u'Moving'
     act = u'copy' if copy else u'move'
     entity = u'album' if album else u'item'
-    log.info(u'{0} {1} {2}{3}.', action, len(objs), entity,
-             u's' if len(objs) != 1 else u'')
+    log.info(u'{0} {1} {2}{3}{4}.', action, len(objs), entity,
+             u's' if len(objs) != 1 else u'', unmoved_msg)
     if not objs:
         return
 
@@ -1746,7 +1776,7 @@ def completion_script(commands):
     # Command aliases
     yield u"  local aliases='%s'\n" % ' '.join(aliases.keys())
     for alias, cmd in aliases.items():
-        yield u"  local alias__%s=%s\n" % (alias, cmd)
+        yield u"  local alias__%s=%s\n" % (alias.replace('-', '_'), cmd)
     yield u'\n'
 
     # Fields
@@ -1763,7 +1793,7 @@ def completion_script(commands):
             if option_list:
                 option_list = u' '.join(option_list)
                 yield u"  local %s__%s='%s'\n" % (
-                    option_type, cmd, option_list)
+                    option_type, cmd.replace('-', '_'), option_list)
 
     yield u'  _beet_dispatch\n'
     yield u'}\n'

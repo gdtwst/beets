@@ -23,6 +23,7 @@ import unicodedata
 import time
 import re
 import six
+import string
 
 from beets import logging
 from beets.mediafile import MediaFile, UnreadableFileError
@@ -455,6 +456,7 @@ class Item(LibModel):
         'mb_albumid':           types.STRING,
         'mb_artistid':          types.STRING,
         'mb_albumartistid':     types.STRING,
+        'mb_releasetrackid':    types.STRING,
         'albumtype':            types.STRING,
         'label':                types.STRING,
         'acoustid_fingerprint': types.STRING,
@@ -468,14 +470,15 @@ class Item(LibModel):
         'albumstatus':          types.STRING,
         'media':                types.STRING,
         'albumdisambig':        types.STRING,
+        'releasegroupdisambig': types.STRING,
         'disctitle':            types.STRING,
         'encoder':              types.STRING,
         'rg_track_gain':        types.NULL_FLOAT,
         'rg_track_peak':        types.NULL_FLOAT,
         'rg_album_gain':        types.NULL_FLOAT,
         'rg_album_peak':        types.NULL_FLOAT,
-        'r128_track_gain':      types.PaddedInt(6),
-        'r128_album_gain':      types.PaddedInt(6),
+        'r128_track_gain':      types.NullPaddedInt(6),
+        'r128_album_gain':      types.NullPaddedInt(6),
         'original_year':        types.PaddedInt(4),
         'original_month':       types.PaddedInt(2),
         'original_day':         types.PaddedInt(2),
@@ -561,6 +564,11 @@ class Item(LibModel):
         if self.mtime == 0 and 'mtime' in values:
             self.mtime = values['mtime']
 
+    def clear(self):
+        """Set all key/value pairs to None."""
+        for key in self._media_tag_fields:
+            setattr(self, key, None)
+
     def get_album(self):
         """Get the Album object that this item belongs to, if any, or
         None if the item is a singleton or is not associated with a
@@ -603,7 +611,7 @@ class Item(LibModel):
 
         self.path = read_path
 
-    def write(self, path=None, tags=None):
+    def write(self, path=None, tags=None, id3v23=None):
         """Write the item's metadata to a media file.
 
         All fields in `_media_fields` are written to disk according to
@@ -615,12 +623,18 @@ class Item(LibModel):
         `tags` is a dictionary of additional metadata the should be
         written to the file. (These tags need not be in `_media_fields`.)
 
+        `id3v23` will override the global `id3v23` config option if it is
+        set to something other than `None`.
+
         Can raise either a `ReadError` or a `WriteError`.
         """
         if path is None:
             path = self.path
         else:
             path = normpath(path)
+
+        if id3v23 is None:
+            id3v23 = beets.config['id3v23'].get(bool)
 
         # Get the data to write to the file.
         item_tags = dict(self)
@@ -632,8 +646,7 @@ class Item(LibModel):
 
         # Open the file.
         try:
-            mediafile = MediaFile(syspath(path),
-                                  id3v23=beets.config['id3v23'].get(bool))
+            mediafile = MediaFile(syspath(path), id3v23=id3v23)
         except UnreadableFileError as exc:
             raise ReadError(path, exc)
 
@@ -649,14 +662,14 @@ class Item(LibModel):
             self.mtime = self.current_mtime()
         plugins.send('after_write', item=self, path=path)
 
-    def try_write(self, path=None, tags=None):
+    def try_write(self, *args, **kwargs):
         """Calls `write()` but catches and logs `FileOperationError`
         exceptions.
 
         Returns `False` an exception was caught and `True` otherwise.
         """
         try:
-            self.write(path, tags)
+            self.write(*args, **kwargs)
             return True
         except FileOperationError as exc:
             log.error(u"{0}", exc)
@@ -897,34 +910,35 @@ class Album(LibModel):
         'artpath': PathType(True),
         'added':   DateType(),
 
-        'albumartist':        types.STRING,
-        'albumartist_sort':   types.STRING,
-        'albumartist_credit': types.STRING,
-        'album':              types.STRING,
-        'genre':              types.STRING,
-        'year':               types.PaddedInt(4),
-        'month':              types.PaddedInt(2),
-        'day':                types.PaddedInt(2),
-        'disctotal':          types.PaddedInt(2),
-        'comp':               types.BOOLEAN,
-        'mb_albumid':         types.STRING,
-        'mb_albumartistid':   types.STRING,
-        'albumtype':          types.STRING,
-        'label':              types.STRING,
-        'mb_releasegroupid':  types.STRING,
-        'asin':               types.STRING,
-        'catalognum':         types.STRING,
-        'script':             types.STRING,
-        'language':           types.STRING,
-        'country':            types.STRING,
-        'albumstatus':        types.STRING,
-        'albumdisambig':      types.STRING,
-        'rg_album_gain':      types.NULL_FLOAT,
-        'rg_album_peak':      types.NULL_FLOAT,
-        'r128_album_gain':    types.PaddedInt(6),
-        'original_year':      types.PaddedInt(4),
-        'original_month':     types.PaddedInt(2),
-        'original_day':       types.PaddedInt(2),
+        'albumartist':          types.STRING,
+        'albumartist_sort':     types.STRING,
+        'albumartist_credit':   types.STRING,
+        'album':                types.STRING,
+        'genre':                types.STRING,
+        'year':                 types.PaddedInt(4),
+        'month':                types.PaddedInt(2),
+        'day':                  types.PaddedInt(2),
+        'disctotal':            types.PaddedInt(2),
+        'comp':                 types.BOOLEAN,
+        'mb_albumid':           types.STRING,
+        'mb_albumartistid':     types.STRING,
+        'albumtype':            types.STRING,
+        'label':                types.STRING,
+        'mb_releasegroupid':    types.STRING,
+        'asin':                 types.STRING,
+        'catalognum':           types.STRING,
+        'script':               types.STRING,
+        'language':             types.STRING,
+        'country':              types.STRING,
+        'albumstatus':          types.STRING,
+        'albumdisambig':        types.STRING,
+        'releasegroupdisambig': types.STRING,
+        'rg_album_gain':        types.NULL_FLOAT,
+        'rg_album_peak':        types.NULL_FLOAT,
+        'r128_album_gain':      types.PaddedInt(6),
+        'original_year':        types.PaddedInt(4),
+        'original_month':       types.PaddedInt(2),
+        'original_day':         types.PaddedInt(2),
     }
 
     _search_fields = ('album', 'albumartist', 'genre')
@@ -963,6 +977,7 @@ class Album(LibModel):
         'country',
         'albumstatus',
         'albumdisambig',
+        'releasegroupdisambig',
         'rg_album_gain',
         'rg_album_peak',
         'r128_album_gain',
@@ -1019,6 +1034,12 @@ class Album(LibModel):
         """
         old_art = self.artpath
         if not old_art:
+            return
+
+        if not os.path.exists(old_art):
+            log.error(u'removing reference to missing album art file {}',
+                      util.displayable_path(old_art))
+            self.artpath = None
             return
 
         new_art = self.art_destination(old_art)
@@ -1441,7 +1462,7 @@ class DefaultTemplateFunctions(object):
     @staticmethod
     def tmpl_title(s):
         """Convert a string to title case."""
-        return s.title()
+        return string.capwords(s)
 
     @staticmethod
     def tmpl_left(s, chars):
@@ -1497,17 +1518,24 @@ class DefaultTemplateFunctions(object):
         # Fast paths: no album, no item or library, or memoized value.
         if not self.item or not self.lib:
             return u''
-        if self.item.album_id is None:
+
+        if isinstance(self.item, Item):
+            album_id = self.item.album_id
+        elif isinstance(self.item, Album):
+            album_id = self.item.id
+
+        if album_id is None:
             return u''
-        memokey = ('aunique', keys, disam, self.item.album_id)
+
+        memokey = ('aunique', keys, disam, album_id)
         memoval = self.lib._memotable.get(memokey)
         if memoval is not None:
             return memoval
 
-        keys = keys or 'albumartist album'
-        disam = disam or 'albumtype year label catalognum albumdisambig'
+        keys = keys or beets.config['aunique']['keys'].as_str()
+        disam = disam or beets.config['aunique']['disambiguators'].as_str()
         if bracket is None:
-            bracket = '[]'
+            bracket = beets.config['aunique']['bracket'].as_str()
         keys = keys.split()
         disam = disam.split()
 
@@ -1519,7 +1547,7 @@ class DefaultTemplateFunctions(object):
             bracket_l = u''
             bracket_r = u''
 
-        album = self.lib.get_album(self.item)
+        album = self.lib.get_album(album_id)
         if not album:
             # Do nothing for singletons.
             self.lib._memotable[memokey] = u''

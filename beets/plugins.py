@@ -17,9 +17,9 @@
 
 from __future__ import division, absolute_import, print_function
 
-import inspect
 import traceback
 import re
+import inspect
 from collections import defaultdict
 from functools import wraps
 
@@ -81,6 +81,7 @@ class BeetsPlugin(object):
             self.template_fields = {}
         if not self.album_template_fields:
             self.album_template_fields = {}
+        self.early_import_stages = []
         self.import_stages = []
 
         self._log = log.getChild(self.name)
@@ -94,6 +95,22 @@ class BeetsPlugin(object):
         """
         return ()
 
+    def _set_stage_log_level(self, stages):
+        """Adjust all the stages in `stages` to WARNING logging level.
+        """
+        return [self._set_log_level_and_params(logging.WARNING, stage)
+                for stage in stages]
+
+    def get_early_import_stages(self):
+        """Return a list of functions that should be called as importer
+        pipelines stages early in the pipeline.
+
+        The callables are wrapped versions of the functions in
+        `self.early_import_stages`. Wrapping provides some bookkeeping for the
+        plugin: specifically, the logging level is adjusted to WARNING.
+        """
+        return self._set_stage_log_level(self.early_import_stages)
+
     def get_import_stages(self):
         """Return a list of functions that should be called as importer
         pipelines stages.
@@ -102,8 +119,7 @@ class BeetsPlugin(object):
         `self.import_stages`. Wrapping provides some bookkeeping for the
         plugin: specifically, the logging level is adjusted to WARNING.
         """
-        return [self._set_log_level_and_params(logging.WARNING, import_stage)
-                for import_stage in self.import_stages]
+        return self._set_stage_log_level(self.import_stages)
 
     def _set_log_level_and_params(self, base_log_level, func):
         """Wrap `func` to temporarily set this plugin's logger level to
@@ -111,7 +127,10 @@ class BeetsPlugin(object):
         value after the function returns). Also determines which params may not
         be sent for backwards-compatibility.
         """
-        argspec = inspect.getargspec(func)
+        if six.PY2:
+            func_args = inspect.getargspec(func).args
+        else:
+            func_args = inspect.getfullargspec(func).args
 
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -126,7 +145,7 @@ class BeetsPlugin(object):
                     if exc.args[0].startswith(func.__name__):
                         # caused by 'func' and not stuff internal to 'func'
                         kwargs = dict((arg, val) for arg, val in kwargs.items()
-                                      if arg in argspec.args)
+                                      if arg in func_args)
                         return func(*args, **kwargs)
                     else:
                         raise
@@ -328,6 +347,16 @@ def types(model_cls):
     return types
 
 
+def named_queries(model_cls):
+    # Gather `item_queries` and `album_queries` from the plugins.
+    attr_name = '{0}_queries'.format(model_cls.__name__.lower())
+    queries = {}
+    for plugin in find_plugins():
+        plugin_queries = getattr(plugin, attr_name, {})
+        queries.update(plugin_queries)
+    return queries
+
+
 def track_distance(item, info):
     """Gets the track distance calculated by all loaded plugins.
     Returns a Distance object.
@@ -391,6 +420,14 @@ def template_funcs():
         if plugin.template_funcs:
             funcs.update(plugin.template_funcs)
     return funcs
+
+
+def early_import_stages():
+    """Get a list of early import stage functions defined by plugins."""
+    stages = []
+    for plugin in find_plugins():
+        stages += plugin.get_early_import_stages()
+    return stages
 
 
 def import_stages():
@@ -464,7 +501,7 @@ def feat_tokens(for_artist=True):
     feat_words = ['ft', 'featuring', 'feat', 'feat.', 'ft.']
     if for_artist:
         feat_words += ['with', 'vs', 'and', 'con', '&']
-    return '(?<=\s)(?:{0})(?=\s)'.format(
+    return r'(?<=\s)(?:{0})(?=\s)'.format(
         '|'.join(re.escape(x) for x in feat_words)
     )
 
@@ -478,9 +515,50 @@ def sanitize_choices(choices, choices_all):
     others = [x for x in choices_all if x not in choices]
     res = []
     for s in choices:
-        if s in list(choices_all) + ['*']:
-            if not (s in seen or seen.add(s)):
-                res.extend(list(others) if s == '*' else [s])
+        if s not in seen:
+            if s in list(choices_all):
+                res.append(s)
+            elif s == '*':
+                res.extend(others)
+        seen.add(s)
+    return res
+
+
+def sanitize_pairs(pairs, pairs_all):
+    """Clean up a single-element mapping configuration attribute as returned
+    by `confit`'s `Pairs` template: keep only two-element tuples present in
+    pairs_all, remove duplicate elements, expand ('str', '*') and ('*', '*')
+    wildcards while keeping the original order. Note that ('*', '*') and
+    ('*', 'whatever') have the same effect.
+
+    For example,
+
+    >>> sanitize_pairs(
+    ...     [('foo', 'baz bar'), ('key', '*'), ('*', '*')],
+    ...     [('foo', 'bar'), ('foo', 'baz'), ('foo', 'foobar'),
+    ...      ('key', 'value')]
+    ...     )
+    [('foo', 'baz'), ('foo', 'bar'), ('key', 'value'), ('foo', 'foobar')]
+    """
+    pairs_all = list(pairs_all)
+    seen = set()
+    others = [x for x in pairs_all if x not in pairs]
+    res = []
+    for k, values in pairs:
+        for v in values.split():
+            x = (k, v)
+            if x in pairs_all:
+                if x not in seen:
+                    seen.add(x)
+                    res.append(x)
+            elif k == '*':
+                new = [o for o in others if o not in seen]
+                seen.update(new)
+                res.extend(new)
+            elif v == '*':
+                new = [o for o in others if o not in seen and o[0] == k]
+                seen.update(new)
+                res.extend(new)
     return res
 
 

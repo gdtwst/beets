@@ -253,6 +253,15 @@ Either ``yes`` or ``no``, indicating whether matched albums should have their
 That is, if this option is turned on, then ``year`` will always equal
 ``original_year`` and so on. Default: ``no``.
 
+.. _artist_credit:
+
+artist_credit
+~~~~~~~~~~~~~
+
+Either ``yes`` or ``no``, indicating whether matched tracks and albums should
+use the artist credit, rather than the artist. That is, if this option is turned
+on, then ``artist`` will contain the artist as credited on the release.
+
 .. _per_disc_numbering:
 
 per_disc_numbering
@@ -275,6 +284,24 @@ use a path format like this::
 When this option is off (the default), even "pregap" hidden tracks are
 numbered from one, not zero, so other track numbers may appear to be bumped up
 by one. When it is on, the pregap track for each disc can be numbered zero.
+
+
+.. _config-aunique:
+
+aunique
+~~~~~~~
+
+These options are used to generate a string that is guaranteed to be unique
+among all albums in the library who share the same set of keys.
+
+The defaults look like this::
+
+    aunique:
+        keys: albumartist album
+        disambiguators: albumtype year label catalognum albumdisambig releasegroupdisambig
+        bracket: '[]'
+
+See :ref:`aunique` for more details.
 
 
 .. _terminal_encoding:
@@ -475,6 +502,26 @@ Either ``yes`` or ``no``, controlling whether imported directories are
 recorded and whether these recorded directories are skipped.  This
 corresponds to the ``-i`` flag to ``beet import``.
 
+.. _incremental_skip_later:
+
+incremental_skip_later
+~~~~~~~~~~~~~~~~~~~~~~
+
+Either ``yes`` or ``no``, controlling whether skipped directories are
+recorded in the incremental list. When set to ``yes``, skipped directories
+will be recorded, and skipped later. When set to ``no``, skipped
+directories won't be recorded, and beets will try to import them again
+later. Defaults to ``no``.
+
+.. _from_scratch:
+
+from_scratch
+~~~~~~~~~~~~
+
+Either ``yes`` or ``no`` (default), controlling whether existing metadata is
+discarded when a match is applied. This corresponds to the ``--from_scratch``
+flag to ``beet import``.
+
 quiet_fallback
 ~~~~~~~~~~~~~~
 
@@ -525,9 +572,11 @@ languages
 ~~~~~~~~~
 
 A list of locale names to search for preferred aliases. For example, setting
-this to "en" uses the transliterated artist name "Pyotr Ilyich Tchaikovsky"
+this to ``en`` uses the transliterated artist name "Pyotr Ilyich Tchaikovsky"
 instead of the Cyrillic script for the composer's name when tagging from
-MusicBrainz. Defaults to an empty list, meaning that no language is preferred.
+MusicBrainz. You can use a space-separated list of language abbreviations, like 
+``en jp es``, to specify a preference order. Defaults to an empty list, meaning 
+that no language is preferred.
 
 .. _detail:
 
@@ -571,11 +620,12 @@ Default: ``yes``.
 duplicate_action
 ~~~~~~~~~~~~~~~~
 
-Either ``skip``, ``keep``, ``remove``, or ``ask``. Controls how duplicates
-are treated in import task. "skip" means that new item(album or track) will be
-skipped; "keep" means keep both old and new items; "remove" means remove old
-item; "ask" means the user should be prompted for the action each time.
-The default is ``ask``.
+Either ``skip``, ``keep``, ``remove``, ``merge`` or ``ask``. 
+Controls how duplicates are treated in import task. 
+"skip" means that new item(album or track) will be skipped; 
+"keep" means keep both old and new items; "remove" means remove old
+item; "merge" means merge into one album; "ask" means the user 
+should be prompted for the action each time. The default is ``ask``.
 
 .. _bell:
 
@@ -608,8 +658,8 @@ Default: ``{}`` (empty).
 MusicBrainz Options
 -------------------
 
-If you run your own `MusicBrainz`_ server, you can instruct beets to use it
-instead of the main server. Use the ``host`` and ``ratelimit`` options under a
+You can instruct beets to use `your own MusicBrainz database`_ instead of
+the `main server`_. Use the ``host`` and ``ratelimit`` options under a
 ``musicbrainz:`` header, like so::
 
     musicbrainz:
@@ -617,14 +667,18 @@ instead of the main server. Use the ``host`` and ``ratelimit`` options under a
         ratelimit: 100
 
 The ``host`` key, of course, controls the Web server hostname (and port,
-optionally) that will be contacted by beets (default: musicbrainz.org). The
-``ratelimit`` option, an integer, controls the number of Web service requests
+optionally) that will be contacted by beets (default: musicbrainz.org).
+The server must have search indices enabled (see `Building search indexes`_).
+
+The ``ratelimit`` option, an integer, controls the number of Web service requests
 per second (default: 1). **Do not change the rate limit setting** if you're
 using the main MusicBrainz server---on this public server, you're `limited`_
 to one request per second.
 
+.. _your own MusicBrainz database: https://musicbrainz.org/doc/MusicBrainz_Server/Setup
+.. _main server: https://musicbrainz.org/
 .. _limited: http://musicbrainz.org/doc/XML_Web_Service/Rate_Limiting
-.. _MusicBrainz: http://musicbrainz.org/
+.. _Building search indexes: https://musicbrainz.org/doc/MusicBrainz_Server/Setup#Building_search_indexes
 
 .. _searchlimit:
 
@@ -751,6 +805,8 @@ the penalty name to the ``ignored`` setting::
 
 The available penalties are the same as those for the :ref:`max_rec` setting.
 
+For example, setting ``ignored: missing_tracks`` will skip any album matches where your audio files are missing some of the tracks. The importer will not attempt to display these matches. It does not ignore the fact that the album is missing tracks, which would allow these matches to apply more easily. To do that, you'll want to adjust the penalty for missing tracks.
+
 .. _required:
 
 required
@@ -763,6 +819,43 @@ want to enforce to the ``required`` setting::
         required: year label catalognum country
 
 No tags are required by default.
+
+.. _ignored_media:
+
+ignored_media
+~~~~~~~~~~~~~
+
+A list of media (i.e., formats) in metadata databases to ignore when matching
+music. You can use this to ignore all media that usually contain video instead
+of audio, for example::
+
+    match:
+        ignored_media: ['Data CD', 'DVD', 'DVD-Video', 'Blu-ray', 'HD-DVD',
+                        'VCD', 'SVCD', 'UMD', 'VHS']
+
+No formats are ignored by default.
+
+
+.. _ignore_data_tracks:
+
+ignore_data_tracks
+~~~~~~~~~~~~~~~~~~~
+
+By default, audio files contained in data tracks within a release are included
+in the album's tracklist. If you want them to be included, set it ``no``.
+
+Default: ``yes``.
+
+.. _ignore_video_tracks:
+
+ignore_video_tracks
+~~~~~~~~~~~~~~~~~~~
+
+By default, video tracks within a release will be ignored. If you want them to
+be included (for example if you would like to track the audio-only versions of
+the video tracks), set it to ``no``.
+
+Default: ``yes``.
 
 .. _path-format-config:
 

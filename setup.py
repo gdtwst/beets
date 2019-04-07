@@ -56,7 +56,7 @@ if 'sdist' in sys.argv:
 
 setup(
     name='beets',
-    version='1.4.6',
+    version='1.4.8',
     description='music tagger and library organizer',
     author='Adrian Sampson',
     author_email='adrian@radbox.org',
@@ -88,13 +88,24 @@ setup(
     install_requires=[
         'six>=1.9',
         'mutagen>=1.33',
-        'munkres',
         'unidecode',
         'musicbrainzngs>=0.4',
         'pyyaml',
-        'jellyfish',
-    ] + (['colorama'] if (sys.platform == 'win32') else []) +
-        (['enum34>=1.0.4'] if sys.version_info < (3, 4, 0) else []),
+    ] + [
+        # Avoid a version of munkres incompatible with Python 3.
+        'munkres~=1.0.0' if sys.version_info < (3, 5, 0) else
+        'munkres!=1.1.0,!=1.1.1' if sys.version_info < (3, 6, 0) else
+        'munkres>=1.0.0',
+    ] + (
+        # Use the backport of Python 3.4's `enum` module.
+        ['enum34>=1.0.4'] if sys.version_info < (3, 4, 0) else []
+    ) + (
+        # Pin a Python 2-compatible version of Jellyfish.
+        ['jellyfish==0.6.0'] if sys.version_info < (3, 4, 0) else ['jellyfish']
+    ) + (
+        # Support for ANSI console colors on Windows.
+        ['colorama'] if (sys.platform == 'win32') else []
+    ),
 
     tests_require=[
         'beautifulsoup4',
@@ -135,10 +146,15 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Environment :: Console',
         'Environment :: Web Environment',
+        'Programming Language :: Python',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: Implementation :: CPython',
     ],
 )

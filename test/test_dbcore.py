@@ -36,6 +36,17 @@ class TestSort(dbcore.query.FieldSort):
     pass
 
 
+class TestQuery(dbcore.query.Query):
+    def __init__(self, pattern):
+        self.pattern = pattern
+
+    def clause(self):
+        return None, ()
+
+    def match(self):
+        return True
+
+
 class TestModel1(dbcore.Model):
     _table = 'test'
     _flex_table = 'testflex'
@@ -48,6 +59,9 @@ class TestModel1(dbcore.Model):
     }
     _sorts = {
         'some_sort': TestSort,
+    }
+    _queries = {
+        'some_query': TestQuery,
     }
 
     @classmethod
@@ -112,6 +126,19 @@ class AnotherTestModel(TestModel1):
         'id': dbcore.types.PRIMARY_ID,
         'foo': dbcore.types.INTEGER,
     }
+
+
+class TestModel5(TestModel1):
+    _fields = {
+        'some_string_field': dbcore.types.STRING,
+        'some_float_field': dbcore.types.FLOAT,
+        'some_boolean_field': dbcore.types.BOOLEAN,
+    }
+
+
+class TestDatabase5(dbcore.Database):
+    _models = (TestModel5,)
+    pass
 
 
 class TestDatabaseTwoModels(dbcore.Database):
@@ -266,9 +293,17 @@ class ModelTest(unittest.TestCase):
             del model['foo']
 
     def test_delete_fixed_attribute(self):
-        model = TestModel1()
-        with self.assertRaises(KeyError):
-            del model['field_one']
+        model = TestModel5()
+        model.some_string_field = 'foo'
+        model.some_float_field = 1.23
+        model.some_boolean_field = True
+
+        for field, type_ in model._fields.items():
+            self.assertNotEqual(model[field], type_.null)
+
+        for field, type_ in model._fields.items():
+            del model[field]
+            self.assertEqual(model[field], type_.null)
 
     def test_null_value_normalization_by_type(self):
         model = TestModel1()
@@ -497,6 +532,10 @@ class QueryFromStringsTest(unittest.TestCase):
     def test_empty_query_part(self):
         q = self.qfs([''])
         self.assertIsInstance(q.subqueries[0], dbcore.query.TrueQuery)
+
+    def test_parse_named_query(self):
+        q = self.qfs(['some_query:foo'])
+        self.assertIsInstance(q.subqueries[0], TestQuery)
 
 
 class SortFromStringsTest(unittest.TestCase):

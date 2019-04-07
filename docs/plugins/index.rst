@@ -54,10 +54,11 @@ like this::
    embyupdate
    export
    fetchart
+   filefilter
+   freedesktop
    fromfilename
    ftintitle
    fuzzy
-   freedesktop
    gmusic
    hook
    ihate
@@ -80,14 +81,16 @@ like this::
    mpdupdate
    permissions
    play
+   playlist
    plexupdate
    random
-   filefilter
    replaygain
    rewrite
    scrub
    smartplaylist
+   sonosupdate
    spotify
+   subsonicupdate
    the
    thumbnails
    types
@@ -147,6 +150,7 @@ Path Formats
 Interoperability
 ----------------
 
+* :doc:`badfiles`: Check audio file integrity.
 * :doc:`embyupdate`: Automatically notifies `Emby`_ whenever the beets library changes.
 * :doc:`importfeeds`: Keep track of imported files via ``.m3u`` playlist file(s) or symlinks.
 * :doc:`ipfs`: Import libraries from friends and get albums from them via ipfs.
@@ -155,16 +159,19 @@ Interoperability
 * :doc:`mpdupdate`: Automatically notifies `MPD`_ whenever the beets library
   changes.
 * :doc:`play`: Play beets queries in your music player.
+* :doc:`playlist`: Use M3U playlists to query the beets library.
 * :doc:`plexupdate`: Automatically notifies `Plex`_ whenever the beets library
   changes.
 * :doc:`smartplaylist`: Generate smart playlists based on beets queries.
+* :doc:`sonosupdate`: Automatically notifies `Sonos`_ whenever the beets library
+  changes.
 * :doc:`thumbnails`: Get thumbnails with the cover art on your album folders.
-* :doc:`badfiles`: Check audio file integrity.
 
 
 .. _Emby: http://emby.media
 .. _Plex: http://plex.tv
 .. _Kodi: http://kodi.tv
+.. _Sonos: http://sonos.com
 
 Miscellaneous
 -------------
@@ -175,6 +182,8 @@ Miscellaneous
   a different directory.
 * :doc:`duplicates`: List duplicate tracks or albums.
 * :doc:`export`: Export data from queries to a format.
+* :doc:`filefilter`: Automatically skip files during the import process based
+  on regular expressions.
 * :doc:`fuzzy`: Search albums and tracks with fuzzy string matching.
 * :doc:`gmusic`: Search and upload files to Google Play Music.
 * :doc:`hook`: Run a command when an event is emitted by beets.
@@ -183,15 +192,15 @@ Miscellaneous
 * :doc:`mbcollection`: Maintain your MusicBrainz collection list.
 * :doc:`mbsubmit`: Print an album's tracks in a MusicBrainz-friendly format.
 * :doc:`missing`: List missing tracks.
+* `mstream`_: A music streaming server + webapp that can be used alongside beets. 
 * :doc:`random`: Randomly choose albums and tracks from your library.
-* :doc:`filefilter`: Automatically skip files during the import process based
-  on regular expressions.
 * :doc:`spotify`: Create Spotify playlists from the Beets library.
 * :doc:`types`: Declare types for flexible attributes.
 * :doc:`web`: An experimental Web-based GUI for beets.
 
 .. _MPD: http://www.musicpd.org/
 .. _MPD clients: http://mpd.wikia.com/wiki/Clients
+.. _mstream: https://github.com/IrosTheBeggar/mStream
 
 .. _other-plugins:
 
@@ -244,6 +253,12 @@ Here are a few of the plugins written by the beets community:
 
 * `beets-popularity`_ fetches popularity values from Spotify.
 
+* `beets-barcode`_ lets you scan or enter barcodes for physical media to
+  search for their metadata.
+
+* `beets-ydl`_ download audio from youtube-dl sources and import into beets
+
+.. _beets-barcode: https://github.com/8h2a/beets-barcode
 .. _beets-check: https://github.com/geigerzaehler/beets-check
 .. _copyartifacts: https://github.com/sbarakat/beets-copyartifacts
 .. _dsedivec: https://github.com/dsedivec/beets-plugins
@@ -262,4 +277,4 @@ Here are a few of the plugins written by the beets community:
 .. _whatlastgenre: https://github.com/YetAnotherNerd/whatlastgenre/tree/master/plugin/beets
 .. _beets-usertag: https://github.com/igordertigor/beets-usertag
 .. _beets-popularity: https://github.com/abba23/beets-popularity
-
+.. _beets-ydl: https://github.com/vmassuchetto/beets-ydl

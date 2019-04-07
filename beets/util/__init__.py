@@ -24,6 +24,7 @@ import re
 import shutil
 import fnmatch
 from collections import Counter
+from multiprocessing.pool import ThreadPool
 import traceback
 import subprocess
 import platform
@@ -422,6 +423,8 @@ def syspath(path, prefix=True):
 
 def samefile(p1, p2):
     """Safer equality for paths."""
+    if p1 == p2:
+        return True
     return shutil._samefile(syspath(p1), syspath(p2))
 
 
@@ -1007,3 +1010,24 @@ def asciify_path(path, sep_replace):
                 sep_replace
             )
     return os.sep.join(path_components)
+
+
+def par_map(transform, items):
+    """Apply the function `transform` to all the elements in the
+    iterable `items`, like `map(transform, items)` but with no return
+    value. The map *might* happen in parallel: it's parallel on Python 3
+    and sequential on Python 2.
+
+    The parallelism uses threads (not processes), so this is only useful
+    for IO-bound `transform`s.
+    """
+    if sys.version_info[0] < 3:
+        # multiprocessing.pool.ThreadPool does not seem to work on
+        # Python 2. We could consider switching to futures instead.
+        for item in items:
+            transform(item)
+    else:
+        pool = ThreadPool()
+        pool.map(transform, items)
+        pool.close()
+        pool.join()
